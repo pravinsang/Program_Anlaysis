@@ -32,6 +32,7 @@ def function_a():
 
 def function_b():
     function_d()
+    function_a()
 
 def function_c():
     pass

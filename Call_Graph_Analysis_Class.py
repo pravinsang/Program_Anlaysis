@@ -7,6 +7,7 @@ class CallGraphVisitor(ast.NodeVisitor):
         self.graph = nx.DiGraph()
         self.current_class = None
         self.current_function = None
+        self.visited_functions = set()
 
     def visit_ClassDef(self, node):
         self.current_class = node.name
@@ -18,18 +19,32 @@ class CallGraphVisitor(ast.NodeVisitor):
             function_name = f"{self.current_class}.{node.name}"
         else:
             function_name = node.name
-        self.current_function = function_name
-        self.graph.add_node(function_name)
-        self.generic_visit(node)
-        self.current_function = None
+        
+        # Ensure each function is visited only once
+        if function_name not in self.visited_functions:
+            self.current_function = function_name
+            self.graph.add_node(function_name)
+            self.visited_functions.add(function_name)
+            self.generic_visit(node)
+            self.current_function = None
 
     def visit_Call(self, node):
         if self.current_function:
-            if isinstance(node.func, ast.Name):
-                self.graph.add_edge(self.current_function, node.func.id)
-            elif isinstance(node.func, ast.Attribute):
-                self.graph.add_edge(self.current_function, f"{node.func.value.id}.{node.func.attr}")
+            func_name = self.get_call_name(node.func)
+            if func_name:
+                self.graph.add_edge(self.current_function, func_name)
         self.generic_visit(node)
+
+    def get_call_name(self, node):
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name) and node.value.id == "self" and self.current_class:
+                return f"{self.current_class}.{node.attr}"
+            else:
+                value_name = self.get_call_name(node.value)
+                return f"{value_name}.{node.attr}" if value_name else None
+        elif isinstance(node, ast.Name):
+            return node.id
+        return None
 
 def generate_call_graph(source_code):
     tree = ast.parse(source_code)
@@ -47,7 +62,9 @@ class MyClass:
         self.method_d()
 
     def method_c(self):
-        pass
+        self.method_e()
+        self.method_d()
+        self.method_a()
 
     def method_d(self):
         self.method_e()
